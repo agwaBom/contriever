@@ -20,6 +20,11 @@ from src import moco, inbatch
 
 logger = logging.getLogger(__name__)
 
+def idx_to_string(idx, tokenizer, dataset):
+    data = dataset.__getitem__(idx)
+    trans_to_string = {'q_tokens': tokenizer.decode(data["q_tokens"], skip_special_tokens=True),
+     'k_tokens': tokenizer.decode(data["k_tokens"], skip_special_tokens=True),}
+    print(trans_to_string)
 
 def train(opt, model, optimizer, scheduler, step):
 
@@ -57,6 +62,9 @@ def train(opt, model, optimizer, scheduler, step):
             step += 1
 
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
+            #import IPython; IPython.embed(); exit()
+            tokenizer.batch_decode(batch['q_tokens'], skip_special_tokens=True)
+            tokenizer.batch_decode(batch['k_tokens'], skip_special_tokens=True)
             train_loss, iter_stats = model(**batch, stats_prefix="train")
 
             train_loss.backward()
@@ -179,6 +187,8 @@ if __name__ == "__main__":
         if not opt.continue_training:
             step = 0
         logger.info(f"Model loaded from {opt.model_path}")
+
+    
 
     logger.info(utils.get_parameters(model))
 

@@ -1,5 +1,5 @@
 NSPLIT=128 #Must be larger than the number of processes used during training
-FILENAME=en_XX.txt
+FILENAME=$1
 INFILE=./${FILENAME}
 TOKENIZER=bert-base-uncased
 #TOKENIZER=bert-base-multilingual-cased
