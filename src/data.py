@@ -27,6 +27,16 @@ def load_data(opt, tokenizer):
     dataset.set_prob(coeff=opt.sampling_coefficient)
     return dataset
 
+def load_dev_data(opt, tokenizer):
+    datasets = {}
+    for path in [opt.dev_data]:
+        data = load_dataset(path, opt.loading_mode)
+        if data is not None:
+            datasets[path] = Dataset(data, opt.chunk_length, tokenizer, opt)
+    dataset = MultiDataset(datasets)
+    dataset.set_prob(coeff=opt.sampling_coefficient)
+    return dataset
+
 
 def load_dataset(data_path, loading_mode):
     files = glob.glob(os.path.join(data_path, "*.p*"))

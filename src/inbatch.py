@@ -60,7 +60,7 @@ class InBatch(nn.Module):
 
         bsz = len(q_tokens)
         labels = torch.arange(0, bsz, dtype=torch.long, device=q_tokens.device)
-
+        # This setting does not assume negative context when fine-tuning
         qemb = self.encoder(input_ids=q_tokens, attention_mask=q_mask, normalize=self.norm_query)
         kemb = self.encoder(input_ids=k_tokens, attention_mask=k_mask, normalize=self.norm_doc)
 

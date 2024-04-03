@@ -50,7 +50,15 @@ def train(opt, model, optimizer, scheduler, step):
         num_workers=opt.num_workers,
         collate_fn=collator,
     )
+    dev_dataset = data.load_dev_data(opt, tokenizer)
 
+    dev_dataloader = DataLoader(
+        dev_dataset,
+        batch_size=opt.per_gpu_batch_size,
+        drop_last=True,
+        num_workers=opt.num_workers,
+        collate_fn=collator,
+    )
     epoch = 1
 
     model.train()
@@ -78,9 +86,10 @@ def train(opt, model, optimizer, scheduler, step):
             if step % opt.log_freq == 0:
                 log = f"{step} / {opt.total_steps}"
                 for k, v in sorted(run_stats.average_stats.items()):
-                    log += f" | {k}: {v:.3f}"
-                    if tb_logger:
-                        tb_logger.add_scalar(k, v, step)
+                    if "train" in k:
+                        log += f" | {k}: {v:.3f}"
+                        if tb_logger:
+                            tb_logger.add_scalar(k, v, step)
                 log += f" | lr: {scheduler.get_last_lr()[0]:0.3g}"
                 log += f" | Memory: {torch.cuda.max_memory_allocated()//1e9} GiB"
 
@@ -88,6 +97,28 @@ def train(opt, model, optimizer, scheduler, step):
                 run_stats.reset()
 
             if step % opt.eval_freq == 0:
+                model.eval()
+                total_dev_acc = 0
+                total_dev_stdq = 0
+                total_dev_stdk = 0
+                total_dev_loss = 0
+                with torch.no_grad():
+                    for batch in dev_dataloader:
+                        batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
+                        tokenizer.batch_decode(batch['q_tokens'], skip_special_tokens=True)
+                        tokenizer.batch_decode(batch['k_tokens'], skip_special_tokens=True)
+                        dev_loss, iter_stats_dev = model(**batch, stats_prefix="dev")
+                        total_dev_acc += iter_stats_dev["dev/accuracy"][0]
+                        total_dev_stdq += iter_stats_dev["dev/stdq"][0]
+                        total_dev_stdk += iter_stats_dev["dev/stdk"][0]
+                        total_dev_loss += dev_loss
+
+                tb_logger.add_scalar("dev/accuracy", total_dev_acc/len(dev_dataloader), step)
+                tb_logger.add_scalar("dev/stdq", total_dev_stdq/len(dev_dataloader), step)
+                tb_logger.add_scalar("dev/stdk", total_dev_stdk/len(dev_dataloader), step)
+                tb_logger.add_scalar("dev/loss", total_dev_loss/len(dev_dataloader), step)
+
+                '''
                 if isinstance(model, torch.nn.parallel.DistributedDataParallel):
                     encoder = model.module.get_encoder()
                 else:
@@ -98,6 +129,7 @@ def train(opt, model, optimizer, scheduler, step):
 
                 if dist_utils.is_main():
                     utils.save(model, optimizer, scheduler, step, opt, opt.output_dir, f"lastlog")
+                '''
 
                 model.train()
 

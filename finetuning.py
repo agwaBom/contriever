@@ -68,7 +68,6 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         for i, batch in enumerate(train_dataloader):
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             step += 1
-
             train_loss, iter_stats = model(**batch, stats_prefix="train")
             train_loss.backward()
 

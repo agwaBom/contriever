@@ -11,6 +11,7 @@ class Options:
 
     def initialize(self):
         # basic parameters
+        self.parser.add_argument("--dev_data", type=str, default="none", help="Data used for evaluation during training")
         self.parser.add_argument(
             "--output_dir", type=str, default="./checkpoint/my_experiments", help="models are saved here"
         )

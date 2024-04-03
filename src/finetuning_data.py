@@ -54,12 +54,9 @@ class Dataset(torch.utils.data.Dataset):
                 negatives = [example["negative_ctxs"][nidx]]
             else:
                 negatives = []
-
-        gold = gold["title"] + " " + gold["text"] if "title" in gold and len(gold["title"]) > 0 else gold["text"]
-
-        negatives = [
-            n["title"] + " " + n["text"] if ("title" in n and len(n["title"]) > 0) else n["text"] for n in negatives
-        ]
+        
+        #gold = gold["title"] + " " + gold["text"] if "title" in gold and len(gold["title"]) > 0 else gold["text"]
+        #negatives = [n["title"] + " " + n["text"] if ("title" in n and len(n["title"]) > 0) else n["text"] for n in negatives]
 
         example = {
             "query": self.normalize_fn(question),
