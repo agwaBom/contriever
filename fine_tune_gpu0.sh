@@ -1,7 +1,7 @@
 #!/bin/bash
 
 for year in 2012 2016 2021; do
-        CUDA_VISIBLE_DEVICES=2 python finetuning.py \
+        CUDA_VISIBLE_DEVICES=0 python finetuning.py \
                 --retriever_model_id bert-base-uncased --pooling average \
                 --train_data wmt_yearly_data/splitted/q_${year}_finetuning_data.jsonl \
                 --loading_mode split \
@@ -12,7 +12,7 @@ for year in 2012 2016 2021; do
                 --warmup_steps 20000 \
                 --total_steps 2000000 --lr 0.00005 \
                 --scheduler linear --optim adamw --per_gpu_batch_size 32 \
-                --output_dir ./checkpoint/contriever_wmt_${year}_finetune_inbatch \
+                --output_dir ./checkpoint/contriever_wmt_${year}_finetune_inbatch_delete_this \
                 --eval_freq 5000 \
                 --save_freq 5000 \
                 --contrastive_mode inbatch \
