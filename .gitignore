@@ -1,4 +1,5 @@
 wmt_yearly_data/*
+wmt_yearly_data_cut_tok/*
 checkpoint/*
 __pycache__/*
 encoded-data/*

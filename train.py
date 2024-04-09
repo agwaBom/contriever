@@ -70,9 +70,8 @@ def train(opt, model, optimizer, scheduler, step):
             step += 1
 
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
-            #import IPython; IPython.embed(); exit()
-            tokenizer.batch_decode(batch['q_tokens'], skip_special_tokens=True)
-            tokenizer.batch_decode(batch['k_tokens'], skip_special_tokens=True)
+            # tokenizer.batch_decode(batch['q_tokens'], skip_special_tokens=True)
+            # tokenizer.batch_decode(batch['k_tokens'], skip_special_tokens=True)
             train_loss, iter_stats = model(**batch, stats_prefix="train")
 
             train_loss.backward()

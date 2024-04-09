@@ -63,8 +63,10 @@ class Options:
         self.parser.add_argument("--norm_doc", action="store_true")
         self.parser.add_argument("--projection_size", type=int, default=768)
 
-        self.parser.add_argument("--ratio_min", type=float, default=0.1)
-        self.parser.add_argument("--ratio_max", type=float, default=0.5)
+        self.parser.add_argument("--ratio_min", type=float, default=1.0)
+        self.parser.add_argument("--ratio_max", type=float, default=1.0)
+        # self.parser.add_argument("--ratio_min", type=float, default=0.1)
+        # self.parser.add_argument("--ratio_max", type=float, default=0.5)
         self.parser.add_argument("--score_function", type=str, default="dot")
         self.parser.add_argument("--retriever_model_id", type=str, default="bert-base-uncased")
         self.parser.add_argument("--pooling", type=str, default="average")
@@ -99,7 +101,7 @@ class Options:
             "--log_freq", type=int, default=100, help="log train stats every <log_freq> steps during training"
         )
         self.parser.add_argument(
-            "--eval_freq", type=int, default=500, help="evaluate model every <eval_freq> steps during training"
+            "--eval_freq", type=int, default=0, help="evaluate model every <eval_freq> steps during training"
         )
         self.parser.add_argument("--save_freq", type=int, default=50000)
         self.parser.add_argument("--maxload", type=int, default=None)
