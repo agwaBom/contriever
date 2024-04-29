@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from src.options import Options
 from src import data, beir_utils, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
+import gc
 
 import train
 
@@ -123,6 +124,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 run_stats.reset()
 
             if opt.eval_freq != 0 and step % opt.eval_freq == 0:
+                gc.collect()
+
                 model.eval()
                 total_dev_p_loss = 0
                 total_dev_wp_loss = 0
@@ -172,6 +175,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
             if step >= opt.total_steps:
                 break
+
+            gc.collect()
 
         epoch += 1
 
@@ -253,6 +258,7 @@ def evaluate(opt, model, tokenizer, tb_logger, step):
 
 
 def main():
+    # need to implement utils.load()
     logger.info("Start")
 
     options = Options()

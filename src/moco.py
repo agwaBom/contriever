@@ -130,13 +130,12 @@ class TimeMoCo(nn.Module):
     def forward(self, q_tokens, q_mask, k_tokens, k_mask, stats_prefix="", iter_stats={}, **kwargs):
         bsz = q_tokens.size(0)
 
+        # Query encoder를 통해 Query의 feature를 추출
         q = self.encoder_q(input_ids=q_tokens, attention_mask=q_mask, normalize=self.norm_query)
  
-        # compute key features
-        # p encoder 하나에 wp도 같이 처리하도록 만들 수 있을 것 같은데?
-        # 이 부분에 대해서 다시 고려해봐
         with torch.no_grad():  # no gradient to keys
             if stats_prefix == "train":
+                # update the key encoder
                 self._momentum_update_k_encoder()  # update the key encoder
             elif stats_prefix == "dev" or stats_prefix == "test":
                 self.encoder_k.eval()
@@ -144,10 +143,11 @@ class TimeMoCo(nn.Module):
             if not self.encoder_k.training and not self.moco_train_mode_encoder_k:
                 self.encoder_k.eval()
 
+            # 같은 K encoder를 사용하여 P(Positive), WP(Weak Positive)의 feature를 추출
             p = self.encoder_k(input_ids=kwargs['p_tokens'], attention_mask=kwargs['p_mask'], normalize=self.norm_doc)
-
             wp = self.encoder_k(input_ids=kwargs['wp_tokens'], attention_mask=kwargs['wp_mask'], normalize=self.norm_doc)
         
+        # P와 WP의 feature를 이용하여 logits 계산 각각 다른 queue를 사용 (p_queue, wp_queue)
         p_logits = self._compute_logits_p(q, p) / self.temperature
         wp_logits = self._compute_logits_wp(q, wp) / self.temperature
         logits = p_logits + wp_logits
@@ -155,16 +155,18 @@ class TimeMoCo(nn.Module):
         # labels: positive key indicators
         labels = torch.zeros(bsz, dtype=torch.long).cuda()
 
+        # P, WP가 정답을 맞추도록 loss 계산
         p_loss = torch.nn.functional.cross_entropy(p_logits, labels, label_smoothing=self.label_smoothing)
         wp_loss = torch.nn.functional.cross_entropy(wp_logits, labels, label_smoothing=self.label_smoothing)
 
-        # wp should be always larger than p at its loss
+        # Ranking Loss를 사용하여 WP는 P보다 항상 더 큰 loss를 가지도록 함
         rank_loss = torch.nn.functional.margin_ranking_loss(wp_loss, p_loss, target=torch.tensor(1).cuda(), margin=0.0, reduction='mean')
 
-        # give more weight to the positive loss
+        # alpha값을 이용하여 P_loss와 WP_loss의 비중을 조절
         alpha = 0.7
         loss = alpha * p_loss + (1 - alpha) * wp_loss + rank_loss
 
+        # P, WP의 feature를 queue 업데이트
         if stats_prefix == "train":
             self._dequeue_and_enqueue_p(p)
             self._dequeue_and_enqueue_wp(wp)

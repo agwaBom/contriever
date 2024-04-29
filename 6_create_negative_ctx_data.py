@@ -107,17 +107,19 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_list', type=list)
-    parser.add_argument('--output', type=str, default='wmt_yearly_data_cut_tok/splitted/q_2012_dev_finetuning_data.jsonl')
+    parser.add_argument('--output', type=str, default='wmt_yearly_data_cut_tok/splitted/2012_2016_2021/q_2021_finetuning_data.jsonl')
     parser.add_argument('--negative_ctx_threshold', type=float, default=-10.00)
     parser.add_argument('--positive_ctx_threshold', type=float, default=10.0)
     parser.add_argument('--question_cnt', type=int, default=10000000)
     args = parser.parse_args()
  
     # Example input list
-    input_path_list = ['wmt_yearly_data_cut_tok/splitted/q_2012_d_2021_dev_positive_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2012_d_2012_dev_positive_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2012_d_2012_dev_negative_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2012_d_2021_dev_negative_ctx.json',]
+    input_path_list = ['wmt_yearly_data_cut_tok/splitted/q_2021_d_2021_positive_ctx.json',
+                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2016_positive_ctx.json',
+                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2012_positive_ctx.json',
+                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2012_negative_ctx.json',
+                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2016_negative_ctx.json',
+                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2021_negative_ctx.json',]
 
     # Read input list (We remove this feature due to large memory consumption)
     # input_data = {file: read_jsonl(file) for file in input_list}
