@@ -76,7 +76,7 @@ def mine_ctx_by_threshold(input_data, negative_threshold=0.10, positive_threshol
     tmp_question = ''
     if is_positive:
         for data in input_data:
-            if float(data['doc_score']) >= p75: # and question_cnt <= question_cnt_threshold:
+            # if float(data['doc_score']) >= p75: # and question_cnt <= question_cnt_threshold:
                 ctx_data.append({
                     'question': data['query_text'],
                     'text': data['text'],
@@ -89,7 +89,7 @@ def mine_ctx_by_threshold(input_data, negative_threshold=0.10, positive_threshol
 
     else:
         for data in input_data:
-            if float(data['doc_score']) <= p25: # and question_cnt <= question_cnt_threshold:
+            # if float(data['doc_score']) <= p25: # and question_cnt <= question_cnt_threshold:
                 ctx_data.append({
                     'question': data['query_text'],
                     'text': data['text'],
@@ -107,19 +107,18 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_list', type=list)
-    parser.add_argument('--output', type=str, default='wmt_yearly_data_cut_tok/splitted/2012_2016_2021/q_2021_finetuning_data.jsonl')
+    parser.add_argument('--output', type=str, default='/home/khyunjin1993/dev/myRepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_2024_finetuning_data.jsonl')
     parser.add_argument('--negative_ctx_threshold', type=float, default=-10.00)
     parser.add_argument('--positive_ctx_threshold', type=float, default=10.0)
     parser.add_argument('--question_cnt', type=int, default=10000000)
     args = parser.parse_args()
  
     # Example input list
-    input_path_list = ['wmt_yearly_data_cut_tok/splitted/q_2021_d_2021_positive_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2016_positive_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2012_positive_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2012_negative_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2016_negative_ctx.json',
-                        'wmt_yearly_data_cut_tok/splitted/q_2021_d_2021_negative_ctx.json',]
+    input_path_list = [
+        'dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_2024_d_2018_positive_ctx.json',
+        'dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_2024_d_2021_positive_ctx.json',
+        'dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_2024_d_2024_positive_ctx.json',
+        'dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_2024_d_0000_positive_ctx.json',]
 
     # Read input list (We remove this feature due to large memory consumption)
     # input_data = {file: read_jsonl(file) for file in input_list}
@@ -129,6 +128,7 @@ if __name__ == "__main__":
     for input_path in input_path_list:
         input_data = read_jsonl(input_path)
         year = re.findall("\d+", input_path)
+        print(year)
 
         if 'negative' in input_path:
             negative_ctx_data = mine_ctx_by_threshold(input_data, negative_threshold=args.negative_ctx_threshold, positive_threshold=args.positive_ctx_threshold, is_positive=False, question_cnt_threshold=args.question_cnt)
@@ -182,7 +182,7 @@ if __name__ == "__main__":
                         total_ctx_data[positive_ctx['question']] = {'question': positive_ctx['question'], 'negative_ctxs': set(), 'hard_negative_ctxs': set(), 'positive_ctxs': set([positive_ctx['text']]), 'weak_positive_ctxs': set(), 'title':'', 'text':''}
                     elif year[0] != year[1]:
                         # add to hard_negative_ctxs
-                        total_ctx_data[positive_ctx['question']] = {'question': positive_ctx['question'], 'negative_ctxs': set(), 'hard_negative_ctxs': set(), 'positive_ctxs': set(),'weak_positive_ctxs': set(positive_ctx['text']), 'title':'', 'text':''}
+                        total_ctx_data[positive_ctx['question']] = {'question': positive_ctx['question'], 'negative_ctxs': set(), 'hard_negative_ctxs': set(), 'positive_ctxs': set(),'weak_positive_ctxs': set([positive_ctx['text']]), 'title':'', 'text':''}
                     question_list.add(positive_ctx['question'])
                 else:
                     if year[0] == year[1]:
@@ -209,13 +209,14 @@ if __name__ == "__main__":
     for ctx_key in total_ctx_data.keys():
         ctx = total_ctx_data[ctx_key]
         len_list.append([len(ctx['negative_ctxs']), len(ctx['hard_negative_ctxs']), len(ctx['positive_ctxs']), len(ctx['weak_positive_ctxs'])])
-        if len(ctx['negative_ctxs']) > 0 and len(ctx['hard_negative_ctxs']) > 0 and len(ctx['positive_ctxs']) > 0 and len(ctx['weak_positive_ctxs']) > 0:
+        # if len(ctx['negative_ctxs']) > 0 and len(ctx['hard_negative_ctxs']) > 0 and len(ctx['positive_ctxs']) > 0 and len(ctx['weak_positive_ctxs']) > 0:
+        if len(ctx['positive_ctxs']) > 0 and len(ctx['weak_positive_ctxs']) > 0:
             ctx_data.append(ctx)
 
-    with open(args.output+'.total', 'w') as f:
-        for ctx in total_ctx_data.keys():
-            ctx = total_ctx_data[ctx]
-            f.write(json.dumps(ctx, default=set_default) + '\n')
+    # with open(args.output+'.total', 'w') as f:
+    #     for ctx in total_ctx_data.keys():
+    #         ctx = total_ctx_data[ctx]
+    #         f.write(json.dumps(ctx, default=set_default) + '\n')
 
     # Save the ctx_data
     with open(args.output, 'w') as f:

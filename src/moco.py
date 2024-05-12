@@ -7,7 +7,6 @@ import copy
 import transformers
 
 from src import contriever, dist_utils, utils
-
 logger = logging.getLogger(__name__)
 
 class TimeMoCo(nn.Module):
@@ -150,7 +149,6 @@ class TimeMoCo(nn.Module):
         # P와 WP의 feature를 이용하여 logits 계산 각각 다른 queue를 사용 (p_queue, wp_queue)
         p_logits = self._compute_logits_p(q, p) / self.temperature
         wp_logits = self._compute_logits_wp(q, wp) / self.temperature
-        logits = p_logits + wp_logits
 
         # labels: positive key indicators
         labels = torch.zeros(bsz, dtype=torch.long).cuda()
@@ -160,11 +158,12 @@ class TimeMoCo(nn.Module):
         wp_loss = torch.nn.functional.cross_entropy(wp_logits, labels, label_smoothing=self.label_smoothing)
 
         # Ranking Loss를 사용하여 WP는 P보다 항상 더 큰 loss를 가지도록 함
-        rank_loss = torch.nn.functional.margin_ranking_loss(wp_loss, p_loss, target=torch.tensor(1).cuda(), margin=0.0, reduction='mean')
+        rank_loss = torch.nn.functional.margin_ranking_loss(wp_loss, p_loss, target=torch.tensor(1).cuda(), margin=1.0, reduction='mean')
 
         # alpha값을 이용하여 P_loss와 WP_loss의 비중을 조절
         alpha = 0.7
         loss = alpha * p_loss + (1 - alpha) * wp_loss + rank_loss
+        logits = alpha * p_logits + (1 - alpha) * wp_logits
 
         # P, WP의 feature를 queue 업데이트
         if stats_prefix == "train":

@@ -7,7 +7,6 @@ import sys
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import logging
-import json
 import numpy as np
 import torch.distributed as dist
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -15,8 +14,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from src.options import Options
 from src import data, beir_utils, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
 import gc
-
-import train
+from pympler import summary, muppy
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -35,8 +33,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         eval_model = model
     eval_model = eval_model.get_encoder()
 
-
-    train_dataset = finetuning_data.HardDataset(
+    print("Loading training data (Est 3 min - 1,500,000it)")
+    train_dataset = finetuning_data.PositiveDataset(#HardDataset(
         datapaths=opt.train_data,
         negative_ctxs=opt.negative_ctxs,
         negative_hard_ratio=opt.negative_hard_ratio,
@@ -48,7 +46,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         training=True,
     )
 
-    dev_dataset = finetuning_data.HardDataset(
+    print("Loading evaluation data (Est 30 sec - 180,000it)")
+    dev_dataset = finetuning_data.PositiveDataset(# HardDataset(
         datapaths=opt.eval_data,
         negative_ctxs=opt.negative_ctxs,
         negative_hard_ratio=opt.negative_hard_ratio,
@@ -56,11 +55,12 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         normalize=opt.eval_normalize_text,
         global_rank=dist_utils.get_rank(),
         world_size=dist_utils.get_world_size(),
-        maxload=opt.maxload,
+        maxload=int(opt.maxload * 0.2),
         training=False,
     )
 
-    collator = finetuning_data.HardCollator(tokenizer, passage_maxlength=opt.chunk_length)
+    #collator = finetuning_data.HardCollator(tokenizer, passage_maxlength=opt.chunk_length)
+    collator = finetuning_data.PositiveCollator(tokenizer, chunk_length=opt.chunk_length, opt=opt, passage_maxlength=opt.chunk_length)
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset,
@@ -86,7 +86,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
     # evaluate(opt, eval_model, tokenizer, tb_logger, step)
 
     epoch = 1
-
+    
     model.train()
     prev_ids, prev_mask = None, None
     while step < opt.total_steps:
@@ -107,7 +107,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
-
+            
             run_stats.update(iter_stats)
 
             if step % opt.log_freq == 0:
@@ -122,41 +122,10 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
                 logger.info(log)
                 run_stats.reset()
-
+            
             if opt.eval_freq != 0 and step % opt.eval_freq == 0:
                 gc.collect()
-
-                model.eval()
-                total_dev_p_loss = 0
-                total_dev_wp_loss = 0
-                total_dev_rank_loss = 0
-                total_dev_all_loss = 0
-                total_dev_acc = 0
-                total_dev_stdq = 0
-                total_dev_stdp = 0
-                total_dev_stdwp = 0
-                with torch.no_grad():
-                    for dev_batch in dev_dataloader:
-                        dev_batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in dev_batch.items()}
-                        dev_loss, iter_stats_dev = model(**dev_batch, stats_prefix="dev")
-
-                        total_dev_p_loss += iter_stats_dev["dev/p_loss"][0]
-                        total_dev_wp_loss += iter_stats_dev["dev/wp_loss"][0]
-                        total_dev_rank_loss += iter_stats_dev["dev/rank_loss"][0]
-                        total_dev_all_loss += iter_stats_dev["dev/all_loss"][0]
-                        total_dev_acc += iter_stats_dev["dev/accuracy"][0]
-                        total_dev_stdq += iter_stats_dev["dev/stdq"][0]
-                        total_dev_stdp += iter_stats_dev["dev/stdp"][0]
-                        total_dev_stdwp += iter_stats_dev["dev/stdwp"][0]
-
-                tb_logger.add_scalar("dev/accuracy", total_dev_acc/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/p_loss", total_dev_p_loss/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/wp_loss", total_dev_wp_loss/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/rank_loss", total_dev_rank_loss/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/all_loss", total_dev_all_loss/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/stdq", total_dev_stdq/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/stdp", total_dev_stdp/len(dev_dataloader), step)
-                tb_logger.add_scalar("dev/stdwp", total_dev_stdwp/len(dev_dataloader), step)
+                validate(model, dev_dataloader, tb_logger, step)
 
                 # train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step)
                 # evaluate(opt, eval_model, tokenizer, tb_logger, step)
@@ -176,9 +145,44 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
             if step >= opt.total_steps:
                 break
 
-            gc.collect()
+            #if step % 20 == 0:
+                #gc.collect() # slows down training
+            #    summary.print_(summary.summarize(muppy.get_objects()))
 
         epoch += 1
+
+def validate(model, dev_dataloader, tb_logger, step):
+    model.eval()
+    total_dev_p_loss = 0
+    total_dev_wp_loss = 0
+    total_dev_rank_loss = 0
+    total_dev_all_loss = 0
+    total_dev_acc = 0
+    total_dev_stdq = 0
+    total_dev_stdp = 0
+    total_dev_stdwp = 0
+    with torch.no_grad():
+        for dev_batch in dev_dataloader:
+            dev_batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in dev_batch.items()}
+            dev_loss, iter_stats_dev = model(**dev_batch, stats_prefix="dev")
+
+            total_dev_p_loss += iter_stats_dev["dev/p_loss"][0]
+            total_dev_wp_loss += iter_stats_dev["dev/wp_loss"][0]
+            total_dev_rank_loss += iter_stats_dev["dev/rank_loss"][0]
+            total_dev_all_loss += iter_stats_dev["dev/all_loss"][0]
+            total_dev_acc += iter_stats_dev["dev/accuracy"][0]
+            total_dev_stdq += iter_stats_dev["dev/stdq"][0]
+            total_dev_stdp += iter_stats_dev["dev/stdp"][0]
+            total_dev_stdwp += iter_stats_dev["dev/stdwp"][0]
+
+    tb_logger.add_scalar("dev/accuracy", total_dev_acc/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/p_loss", total_dev_p_loss/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/wp_loss", total_dev_wp_loss/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/rank_loss", total_dev_rank_loss/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/all_loss", total_dev_all_loss/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/stdq", total_dev_stdq/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/stdp", total_dev_stdp/len(dev_dataloader), step)
+    tb_logger.add_scalar("dev/stdwp", total_dev_stdwp/len(dev_dataloader), step)
 
 
 def evaluate(opt, model, tokenizer, tb_logger, step):
