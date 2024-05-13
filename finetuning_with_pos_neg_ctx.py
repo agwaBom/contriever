@@ -13,9 +13,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from src.options import Options
-from src import data, beir_utils, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
-
-import train
+from src import data, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

@@ -65,3 +65,26 @@ for year in 2021; do
                 --save_freq 5000 \
                 --contrastive_mode moco
 done
+
+
+
+for year in 2024; do
+        CUDA_VISIBLE_DEVICES=0 python /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/src/retriever/contriever/contriever/finetuning_with_pos_neg_ctx.py \
+                --retriever_model_id bert-base-uncased --pooling average \
+                --train_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_${year}_finetuning_data.jsonl \
+                --eval_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/q_${year}_dev_finetuning_data.jsonl \
+                --loading_mode split \
+                --augementation delete --prob_augmentation 0.1 \
+                --model_path bert-base-uncased \
+                --chunk_length 256 \
+                --ratio_min 0.1 --ratio_max 0.5 \
+                --momentum 0.9995 --temperature 0.05 \
+                --warmup_steps 20000 \
+                --eval_freq 1000 \
+                --total_steps 2000000 --lr 0.00005 \
+                --scheduler linear --optim adamw --per_gpu_batch_size 64 \
+                --output_dir /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/contriever_wikipedia_${year}_train_moco_${year}_rankloss_1 \
+                --save_freq 2000 \
+                --contrastive_mode moco \
+                # --maxload 1000000
+done
