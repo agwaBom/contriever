@@ -17,7 +17,7 @@ import src.utils
 from src.evaluation import calculate_matches
 
 logger = logging.getLogger(__name__)
-
+# input_data=[{'answer': answer, 'ctxs': [{'text': text}, {'text': text2}]}, ... ,{}]
 def validate(data, workers_num):
     match_stats = calculate_matches(data, workers_num)
     top_k_hits = match_stats.top_k_hits
