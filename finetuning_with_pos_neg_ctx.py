@@ -12,7 +12,8 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from src.options import Options
-from src import data, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
+from src import data, beir_utils, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
+import gc
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -53,29 +54,31 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         normalize=opt.eval_normalize_text,
         global_rank=dist_utils.get_rank(),
         world_size=dist_utils.get_world_size(),
-        maxload=int(opt.maxload * 0.2),
+        maxload=50000,#int(opt.maxload * 0.2) if opt.maxload is not None else 50000,
         training=False,
     )
 
     #collator = finetuning_data.HardCollator(tokenizer, passage_maxlength=opt.chunk_length)
     collator = finetuning_data.PositiveCollator(tokenizer, chunk_length=opt.chunk_length, opt=opt, passage_maxlength=opt.chunk_length)
-    train_sampler = RandomSampler(train_dataset)
+    #train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset,
-        sampler=train_sampler,
+        #sampler=train_sampler,
+        shuffle=False,
         batch_size=opt.per_gpu_batch_size,
         drop_last=True,
-        num_workers=opt.num_workers,
+        #num_workers=opt.num_workers,
         collate_fn=collator,
     )
 
-    dev_sampler = SequentialSampler(dev_dataset)
+    #dev_sampler = SequentialSampler(dev_dataset)
     dev_dataloader = DataLoader(
         dev_dataset,
-        sampler=dev_sampler,
+        #sampler=dev_sampler,
+        shuffle=False,
         batch_size=opt.per_gpu_eval_batch_size,
         drop_last=False,
-        num_workers=opt.num_workers,
+        #num_workers=opt.num_workers,
         collate_fn=collator,
     )
 
@@ -84,10 +87,11 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
     # evaluate(opt, eval_model, tokenizer, tb_logger, step)
 
     epoch = 1
+    kill_step = 30000
     
     model.train()
     prev_ids, prev_mask = None, None
-    while step < opt.total_steps:
+    while step < opt.total_steps and step < kill_step:
         logger.info(f"Start epoch {epoch}, number of batches: {len(train_dataloader)}")
         for i, batch in enumerate(train_dataloader):
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
@@ -115,6 +119,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                         log += f" | {k}: {v:.3f}"
                         if tb_logger:
                             tb_logger.add_scalar(k, v, step)
+                tb_logger.add_scalar("learning rate", scheduler.get_last_lr()[0], step)
                 log += f" | lr: {scheduler.get_last_lr()[0]:0.3g}"
                 log += f" | Memory: {torch.cuda.max_memory_allocated()//1e9} GiB"
 
@@ -140,7 +145,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                     )
                 model.train()
 
-            if step >= opt.total_steps:
+            if step >= opt.total_steps or step >= kill_step:
                 break
 
             #if step % 20 == 0:
@@ -148,7 +153,17 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
             #    summary.print_(summary.summarize(muppy.get_objects()))
 
         epoch += 1
+        
+        '''
+        model.p_queue = torch.randn(opt.projection_size, opt.queue_size).cuda()
+        model.p_queue = torch.nn.functional.normalize(model.p_queue, dim=0)
+        model.p_queue_ptr = torch.zeros(1, dtype=torch.long).cuda()
 
+        model.wp_queue = torch.randn(opt.projection_size, opt.queue_size).cuda()
+        model.wp_queue = torch.nn.functional.normalize(model.wp_queue, dim=0)
+        model.wp_queue_ptr = torch.zeros(1, dtype=torch.long).cuda()
+        '''
+        
 def validate(model, dev_dataloader, tb_logger, step):
     model.eval()
     total_dev_p_loss = 0
