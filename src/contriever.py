@@ -109,8 +109,8 @@ def load_retriever(model_path, pooling="average", random_init=False):
         if hasattr(opt, "retriever_model_id"):
             retriever_model_id = opt.retriever_model_id
         else:
-            # retriever_model_id = "bert-base-uncased"
-            retriever_model_id = "bert-base-multilingual-cased"
+            retriever_model_id = "bert-base-uncased"
+            # retriever_model_id = "bert-base-multilingual-cased"
         tokenizer = utils.load_hf(transformers.AutoTokenizer, retriever_model_id)
         cfg = utils.load_hf(transformers.AutoConfig, retriever_model_id)
         if "xlm" in retriever_model_id:

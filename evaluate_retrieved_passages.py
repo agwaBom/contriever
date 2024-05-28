@@ -58,7 +58,7 @@ def main(opt):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data', required=True, type=str, default=None)
+    parser.add_argument('--data', type=str, default="dataset/post_situatedQA/yearly/test/2015/eval_contriever_wiki_2018_finetune_moco.jsonl")
     parser.add_argument('--validation_workers', type=int, default=16,
                         help="Number of parallel processes to validate results")
 

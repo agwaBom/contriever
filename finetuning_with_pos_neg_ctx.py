@@ -76,7 +76,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         dev_dataset,
         #sampler=dev_sampler,
         shuffle=False,
-        batch_size=opt.per_gpu_eval_batch_size,
+        batch_size=opt.per_gpu_batch_size,
         drop_last=False,
         #num_workers=opt.num_workers,
         collate_fn=collator,
@@ -87,8 +87,12 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
     # evaluate(opt, eval_model, tokenizer, tb_logger, step)
 
     epoch = 1
-    kill_step = 30000
-    
+    kill_step = 500000
+    model.eval()
+    encoder = model.get_encoder()
+    evaluate_model(
+        opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step
+    )
     model.train()
     prev_ids, prev_mask = None, None
     while step < opt.total_steps and step < kill_step:
@@ -128,6 +132,10 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
             
             if opt.eval_freq != 0 and step % opt.eval_freq == 0:
                 gc.collect()
+                encoder = model.get_encoder()
+                evaluate_model(
+                    opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step
+                )
                 validate(model, dev_dataloader, tb_logger, step)
 
                 # train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step)
@@ -135,7 +143,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
                 if step % opt.save_freq == 0 and dist_utils.get_rank() == 0:
                     utils.save(
-                        eval_model,
+                        model,
                         optimizer,
                         scheduler,
                         step,
@@ -163,7 +171,32 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         model.wp_queue = torch.nn.functional.normalize(model.wp_queue, dim=0)
         model.wp_queue_ptr = torch.zeros(1, dtype=torch.long).cuda()
         '''
-        
+
+def evaluate_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
+    datasetname="scifact"
+    metrics = beir_utils.evaluate_model(
+        query_encoder,
+        doc_encoder,
+        tokenizer,
+        dataset=datasetname,
+        batch_size=opt.per_gpu_batch_size,
+        norm_doc=opt.norm_doc,
+        norm_query=opt.norm_query,
+        beir_dir=opt.eval_datasets_dir,
+        score_function=opt.score_function,
+        lower_case=opt.lower_case,
+        normalize_text=opt.eval_normalize_text,
+    )
+
+    message = []
+    if dist_utils.is_main():
+        for metric in ["NDCG@10", "Recall@10", "Recall@100"]:
+            message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
+            if tb_logger is not None:
+                tb_logger.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
+        logger.info(" | ".join(message))
+
+
 def validate(model, dev_dataloader, tb_logger, step):
     model.eval()
     total_dev_p_loss = 0
@@ -297,9 +330,79 @@ def main():
 
     step = 0
 
-    retriever, tokenizer, retriever_model_id = contriever.load_retriever(opt.model_path, opt.pooling, opt.random_init)
-    opt.retriever_model_id = retriever_model_id
+    # retriever, tokenizer, retriever_model_id = contriever.load_retriever(opt.model_path, opt.pooling, opt.random_init)
+    # opt.retriever_model_id = retriever_model_id
 
+    if opt.contrastive_mode == "moco":
+        model_class = moco.TimeMoCo
+    elif opt.contrastive_mode == "inbatch":
+        model_class = inbatch.InBatch
+    else:
+        raise ValueError(f"contrastive mode: {opt.contrastive_mode} not recognised")
+
+    if not directory_exists and opt.model_path == "none":
+        model = model_class(opt)
+        model = model.cuda()
+        optimizer, scheduler = utils.set_optim(opt, model)
+        step = 0
+    elif not directory_exists and opt.model_path != "none":
+        model, _, _, _, _ = utils.load(
+            model_class,
+            opt.model_path,
+            opt,
+            reset_params=False,
+        )
+        logger.info(f"2nd Phase Model loaded from {opt.output_dir}")
+        step = 0
+        optimizer, scheduler = utils.set_optim(opt, model)
+    elif directory_exists:
+        model_path = os.path.join(opt.output_dir, "checkpoint", "latest")
+        model, optimizer, scheduler, opt_checkpoint, step = utils.load(
+            model_class,
+            model_path,
+            opt,
+            reset_params=False,
+        )
+        logger.info(f"Model loaded from {opt.output_dir}")
+    else:
+        retriever, tokenizer, retriever_model_id = contriever.load_retriever(opt.model_path, opt.pooling, opt.random_init)
+        opt.retriever_model_id = retriever_model_id
+ 
+        if opt.contrastive_mode == 'inbatch':
+            model = inbatch.InBatch(opt, retriever, tokenizer)
+        elif opt.contrastive_mode == 'moco':
+            model = moco.TimeMoCo(opt, retriever, tokenizer)
+        else:
+            raise ValueError(f"contrastive mode: {opt.contrastive_mode} not recognised")
+        model = model.cuda()
+        optimizer, scheduler = utils.set_optim(opt, model)
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Dropout):
+                module.p = opt.dropout
+
+        '''
+        model, optimizer, scheduler, opt_checkpoint, step = utils.load(
+            model_class,
+            opt.model_path,
+            opt,
+            reset_params=False if opt.continue_training else True,
+        )
+        if not opt.continue_training:
+            step = 0
+        logger.info(f"Model loaded from {opt.model_path}")
+        '''
+    logger.info(utils.get_parameters(model))
+
+    if dist.is_initialized():
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[opt.local_rank],
+            output_device=opt.local_rank,
+            find_unused_parameters=False,
+        )
+        dist.barrier()
+
+    '''
     if opt.contrastive_mode == 'inbatch':
         model = inbatch.InBatch(opt, retriever, tokenizer)
     elif opt.contrastive_mode == 'moco':
@@ -324,7 +427,11 @@ def main():
             output_device=opt.local_rank,
             find_unused_parameters=False,
         )
-
+    '''
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        tokenizer = model.module.tokenizer
+    else:
+        tokenizer = model.tokenizer
     logger.info("Start training")
     finetuning(opt, model, optimizer, scheduler, tokenizer, step)
 

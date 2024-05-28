@@ -125,7 +125,6 @@ for year in 0000 2018 2021 2024; do
                 --eval_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_dev_finetuning_data.jsonl \
                 --loading_mode split \
                 --augementation delete --prob_augmentation 0.1 \
-                --model_path bert-base-uncased \
                 --queue_size 131072 \
                 --chunk_length 256 \
                 --ratio_min 0.1 --ratio_max 0.5 \
@@ -160,30 +159,95 @@ for year in 0000 2018 2021 2024; do
                 # --maxload 500000
 done
 
-
-for year in 2021; do
+for year in 2024; do
         CUDA_VISIBLE_DEVICES=0 python /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/src/retriever/contriever/contriever/finetuning_with_pos_neg_ctx.py \
                 --retriever_model_id bert-base-uncased --pooling average \
                 --train_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_finetuning_data.jsonl \
                 --eval_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_dev_finetuning_data.jsonl \
                 --loading_mode split \
                 --augementation delete --prob_augmentation 0.1 \
-                --model_path bert-base-uncased \
                 --queue_size 131072 \
                 --chunk_length 256 \
                 --ratio_min 0.1 --ratio_max 0.5 \
                 --momentum 0.9995 --temperature 0.05 \
-                --warmup_steps 320000 \
-                --eval_freq 1000 \
-                --total_steps 8000000 --lr 0.000004 \
-                --scheduler linear --optim adamw --per_gpu_batch_size 128 \
-                --output_dir /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/bert-base-uncased_wikipedia_${year}_train_moco_${year}_rankloss_1_queue_131072_lr_2e-6 \
+                --warmup_steps 20000 \
+                --eval_freq 2000 \
+                --total_steps 500000 --lr 0.000002 \
+                --scheduler linear --optim adamw --per_gpu_batch_size 64 \
+                --output_dir /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/bert-base-uncased_wikipedia_${year}_train_moco_${year}_rankloss_1_queue_131072_lr_2e-6_beir_1 \
+                --save_freq 2000 \
+                --contrastive_mode moco
+done
+
+
+for year in 2024; do
+        CUDA_VISIBLE_DEVICES=0 python /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/src/retriever/contriever/contriever/finetuning_with_pos_neg_ctx.py \
+                --retriever_model_id bert-base-uncased --pooling average \
+                --train_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_finetuning_data.jsonl \
+                --eval_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_dev_finetuning_data.jsonl \
+                --loading_mode split \
+                --model_path facebook/contriever \
+                --augementation delete --prob_augmentation 0.1 \
+                --queue_size 131072 \
+                --chunk_length 256 \
+                --ratio_min 0.1 --ratio_max 0.5 \
+                --momentum 0.9995 --temperature 0.05 \
+                --warmup_steps 20000 \
+                --eval_freq 2000 \
+                --total_steps 500000 --lr 0.000002 \
+                --scheduler linear --optim adamw --per_gpu_batch_size 64 \
+                --output_dir /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/contriever_wikipedia_${year}_train_moco_${year}_rankloss_1_queue_131072_lr_2e-6_beir_1 \
                 --save_freq 2000 \
                 --contrastive_mode moco \
-                # --maxload 500000
+                # --maxload 50000
 done
 
 # 1k step 에 가장 성능이 낮게 나옴
 # moco queue -> 4096  # 131072/2048 = 64
 # batch size -> 64
 # queue/bs = 1024 -> 1024 step 에서 가장 성능이 낮게 나옴
+
+
+for year in 2018; do
+        CUDA_VISIBLE_DEVICES=0 python /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/src/retriever/contriever/contriever/finetuning_with_pos_neg_ctx.py \
+                --retriever_model_id bert-base-uncased --pooling average \
+                --train_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_finetuning_data.jsonl \
+                --eval_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_dev_finetuning_data.jsonl \
+                --loading_mode split \
+                --model_path /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/bert-base-uncased_wikipedia_2018_train_moco_2018_rankloss_1_queue_131072_lr_2e-6_beir_1/checkpoint/step-500000/ \
+                --augementation delete --prob_augmentation 0.1 \
+                --queue_size 131072 \
+                --chunk_length 256 \
+                --ratio_min 0.1 --ratio_max 0.5 \
+                --momentum 0.9995 --temperature 0.05 \
+                --warmup_steps 20000 \
+                --eval_freq 2000 \
+                --total_steps 500000 --lr 0.000002 \
+                --scheduler linear --optim adamw --per_gpu_batch_size 64 \
+                --output_dir /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/bert-base-uncased_wikipedia_${year}_train_moco_${year}_rankloss_1_queue_131072_lr_2e-6_beir_2nd_phase \
+                --save_freq 2000 \
+                --contrastive_mode moco
+done
+
+
+for year in 2018; do
+        CUDA_VISIBLE_DEVICES=1 python /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/src/retriever/contriever/contriever/finetuning_with_pos_neg_ctx.py \
+                --retriever_model_id bert-base-uncased --pooling average \
+                --train_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_finetuning_data.jsonl \
+                --eval_data /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/new/things_to_send/q_${year}_dev_finetuning_data.jsonl \
+                --loading_mode split \
+                --model_path /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/contriever_wikipedia_2018_train_moco_2018_rankloss_1_queue_131072_lr_2e-6_beir_1/checkpoint/step-500000/ \
+                --augementation delete --prob_augmentation 0.1 \
+                --queue_size 131072 \
+                --chunk_length 256 \
+                --ratio_min 0.1 --ratio_max 0.5 \
+                --momentum 0.9995 --temperature 0.05 \
+                --warmup_steps 20000 \
+                --eval_freq 2000 \
+                --total_steps 500000 --lr 0.000002 \
+                --scheduler linear --optim adamw --per_gpu_batch_size 64 \
+                --output_dir /home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/contriever_wikipedia_${year}_train_moco_${year}_rankloss_1_queue_131072_lr_2e-6_beir_2nd_phase \
+                --save_freq 2000 \
+                --contrastive_mode moco \
+                # --maxload 50000
+done
