@@ -41,7 +41,7 @@ def main(opt):
         answers = [ex['answers'] for ex in data]
         top_k_hits = validate(data, args.validation_workers)
         message = f"Evaluate results from {path}:"
-        for k in [5, 10, 20, 100]:
+        for k in [1, 5, 10, 20, 100]:
             if k <= len(top_k_hits):
                 recall = 100 * top_k_hits[k-1]
                 if k == 20:
@@ -53,14 +53,16 @@ def main(opt):
     print(datapaths)
     print('\t'.join(r20))
     print('\t'.join(r100))
-
+    with open(opt.output_log_file, 'a') as f:
+        f.write(message.replace(f"Evaluate results from {path}: ", "")+'\n')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data', type=str, default="dataset/post_situatedQA/yearly/test/2015/eval_contriever_wiki_2018_finetune_moco.jsonl")
+    parser.add_argument('--data', type=str, default="/home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/processed/checkpoint/add_title/time_vector/bert-base-uncased/timemoco_bert-base-uncased_2018_2021_interp_0.3_0.7/SituatedQA_retriever_evaluate_2018.jsonl")
     parser.add_argument('--validation_workers', type=int, default=16,
                         help="Number of parallel processes to validate results")
+    parser.add_argument('--output_log_file', type=str, default='./tmp.log',)
 
     args = parser.parse_args()
     main(args)

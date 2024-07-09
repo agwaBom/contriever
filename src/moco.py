@@ -158,7 +158,7 @@ class TimeMoCo(nn.Module):
         wp_loss = torch.nn.functional.cross_entropy(wp_logits, labels, label_smoothing=self.label_smoothing)
 
         # Ranking Loss를 사용하여 WP는 P보다 항상 더 큰 loss를 가지도록 함
-        rank_loss = torch.nn.functional.margin_ranking_loss(wp_loss, p_loss, target=torch.tensor(1).cuda(), margin=1.0, reduction='mean')
+        rank_loss = torch.nn.functional.margin_ranking_loss(wp_loss, p_loss, target=torch.tensor(1).cuda(), margin=4.0, reduction='mean')
 
         # alpha값을 이용하여 P_loss와 WP_loss의 비중을 조절
         alpha = 0.7

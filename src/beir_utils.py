@@ -178,7 +178,7 @@ def evaluate_model(
         corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=split)
         results = retriever.retrieve(corpus, queries)
         if is_main:
-            ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+            ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values, ignore_identical_ids=False)
             for metric in (ndcg, _map, recall, precision, "mrr", "recall_cap", "hole"):
                 if isinstance(metric, str):
                     metric = retriever.evaluate_custom(qrels, results, retriever.k_values, metric=metric)

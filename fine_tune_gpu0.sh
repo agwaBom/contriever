@@ -201,7 +201,6 @@ for year in 2024; do
                 --contrastive_mode moco \
                 # --maxload 50000
 done
-
 # 1k step 에 가장 성능이 낮게 나옴
 # moco queue -> 4096  # 131072/2048 = 64
 # batch size -> 64

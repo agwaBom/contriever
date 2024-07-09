@@ -136,7 +136,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 evaluate_model(
                     opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step
                 )
-                validate(model, dev_dataloader, tb_logger, step)
+                # dev set validation
+                # validate(model, dev_dataloader, tb_logger, step)
 
                 # train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step)
                 # evaluate(opt, eval_model, tokenizer, tb_logger, step)
@@ -173,28 +174,47 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         '''
 
 def evaluate_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
-    datasetname="scifact"
-    metrics = beir_utils.evaluate_model(
-        query_encoder,
-        doc_encoder,
-        tokenizer,
-        dataset=datasetname,
-        batch_size=opt.per_gpu_batch_size,
-        norm_doc=opt.norm_doc,
-        norm_query=opt.norm_query,
-        beir_dir=opt.eval_datasets_dir,
-        score_function=opt.score_function,
-        lower_case=opt.lower_case,
-        normalize_text=opt.eval_normalize_text,
-    )
+    datasetnamelist=["scifact", "2018", "2021"]
 
-    message = []
-    if dist_utils.is_main():
-        for metric in ["NDCG@10", "Recall@10", "Recall@100"]:
-            message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
-            if tb_logger is not None:
-                tb_logger.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
-        logger.info(" | ".join(message))
+    for datasetname in datasetnamelist:
+        if datasetname == "scifact":
+            metrics = beir_utils.evaluate_model(
+                query_encoder,
+                doc_encoder,
+                tokenizer,
+                dataset=datasetname,
+                batch_size=opt.per_gpu_batch_size,
+                norm_doc=opt.norm_doc,
+                norm_query=opt.norm_query,
+                beir_dir=opt.eval_datasets_dir,
+                score_function=opt.score_function,
+                lower_case=opt.lower_case,
+                normalize_text=opt.eval_normalize_text,
+            )
+        else:
+            metrics = beir_utils.evaluate_model(
+                query_encoder,
+                doc_encoder,
+                tokenizer,
+                dataset=datasetname,
+                batch_size=opt.per_gpu_batch_size,
+                norm_doc=opt.norm_doc,
+                norm_query=opt.norm_query,
+                beir_dir="/home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/original/situated_qa_beir/",
+                score_function=opt.score_function,
+                lower_case=opt.lower_case,
+                normalize_text=opt.eval_normalize_text,
+            )
+
+        message = []
+        if dist_utils.is_main():
+            for metric in ["NDCG@10", "Recall@10", "Recall@100"]:
+                message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
+                if tb_logger is not None:
+                    tb_logger.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
+            logger.info(" | ".join(message))
+    
+    
 
 
 def validate(model, dev_dataloader, tb_logger, step):
