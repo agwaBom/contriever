@@ -31,7 +31,7 @@ def validate(data, workers_num):
 def main(opt):
     logger = src.utils.init_logger(opt, stdout_only=True)
     datapaths = glob.glob(args.data)
-    r20, r100 = [], []
+    r10, r100 = [], []
     for path in datapaths:
         data = []
         with open(path, 'r') as fin:
@@ -44,14 +44,14 @@ def main(opt):
         for k in [1, 5, 10, 20, 100]:
             if k <= len(top_k_hits):
                 recall = 100 * top_k_hits[k-1]
-                if k == 20:
-                    r20.append(f"{recall:.1f}")
+                if k == 10:
+                    r10.append(f"{recall:.1f}")
                 if k == 100:
                     r100.append(f"{recall:.1f}")
                 message += f' R@{k}: {recall:.1f}'
         logger.info(message)
     print(datapaths)
-    print('\t'.join(r20))
+    print('\t'.join(r10))
     print('\t'.join(r100))
     with open(opt.output_log_file, 'a') as f:
         f.write(message.replace(f"Evaluate results from {path}: ", "")+'\n')

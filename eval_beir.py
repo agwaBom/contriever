@@ -11,6 +11,7 @@ import logging
 import json
 import numpy as np
 import os
+from transformers import AutoModel, AutoTokenizer
 
 import src.slurm
 import src.contriever
@@ -31,7 +32,16 @@ def main(args):
 
     logger = src.utils.init_logger(args)
 
-    model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
+    model_list = ['facebook/dpr-question_encoder-single-nq-base']#, 'google/realm-cc-news-pretrained-embedder']
+    if args.model_name_or_path in model_list:
+        model = AutoModel.from_pretrained(args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+    elif args.model_name_or_path == 'google/realm-cc-news-pretrained-embedder':
+        from transformers import RealmEmbedder, RealmTokenizer
+        model = RealmEmbedder.from_pretrained(args.model_name_or_path)
+        tokenizer = RealmTokenizer.from_pretrained(args.model_name_or_path)
+    else:
+        model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
     model = model.cuda()
     model.eval()
     query_encoder = model
@@ -48,7 +58,7 @@ def main(args):
         norm_query=args.norm_query,
         norm_doc=args.norm_doc,
         is_main=src.dist_utils.is_main(),
-        split="dev" if args.dataset == "msmarco" else "test",
+        split="test", # if args.dataset == "msmarco" else "test",
         score_function=args.score_function,
         beir_dir=args.beir_dir,
         save_results_path=args.save_results_path,
@@ -65,7 +75,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--dataset", type=str, help="Evaluation dataset from the BEIR benchmark")
-    parser.add_argument("--beir_dir", type=str, default="./", help="Directory to save and load beir datasets")
+    parser.add_argument("--beir_dir", type=str, default="/home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/BEIR/datasets", help="Directory to save and load beir datasets")
     parser.add_argument("--text_maxlength", type=int, default=512, help="Maximum text length")
 
     parser.add_argument("--per_gpu_batch_size", default=128, type=int, help="Batch size per GPU/CPU for indexing.")

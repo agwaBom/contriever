@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from src.options import Options
 from src import data, beir_utils, slurm, dist_utils, utils, contriever, finetuning_data, inbatch, moco
 import gc
-
+import copy
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logger = logging.getLogger(__name__)
@@ -43,20 +43,22 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         world_size=dist_utils.get_world_size(),
         maxload=opt.maxload,
         training=True,
+        # maxload=50000, #debugging
     )
 
     print("Loading evaluation data (Est 30 sec - 180,000it)")
-    dev_dataset = finetuning_data.PositiveDataset(# HardDataset(
-        datapaths=opt.eval_data,
-        negative_ctxs=opt.negative_ctxs,
-        negative_hard_ratio=opt.negative_hard_ratio,
-        negative_hard_min_idx=opt.negative_hard_min_idx,
-        normalize=opt.eval_normalize_text,
-        global_rank=dist_utils.get_rank(),
-        world_size=dist_utils.get_world_size(),
-        maxload=50000,#int(opt.maxload * 0.2) if opt.maxload is not None else 50000,
-        training=False,
-    )
+    if len(opt.eval_data) != 0:
+        dev_dataset = finetuning_data.PositiveDataset(# HardDataset(
+            datapaths=opt.eval_data,
+            negative_ctxs=opt.negative_ctxs,
+            negative_hard_ratio=opt.negative_hard_ratio,
+            negative_hard_min_idx=opt.negative_hard_min_idx,
+            normalize=opt.eval_normalize_text,
+            global_rank=dist_utils.get_rank(),
+            world_size=dist_utils.get_world_size(),
+            maxload=50000,#int(opt.maxload * 0.2) if opt.maxload is not None else 50000,
+            training=False,
+        )
 
     #collator = finetuning_data.HardCollator(tokenizer, passage_maxlength=opt.chunk_length)
     collator = finetuning_data.PositiveCollator(tokenizer, chunk_length=opt.chunk_length, opt=opt, passage_maxlength=opt.chunk_length)
@@ -70,17 +72,17 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         #num_workers=opt.num_workers,
         collate_fn=collator,
     )
-
-    #dev_sampler = SequentialSampler(dev_dataset)
-    dev_dataloader = DataLoader(
-        dev_dataset,
-        #sampler=dev_sampler,
-        shuffle=False,
-        batch_size=opt.per_gpu_batch_size,
-        drop_last=False,
-        #num_workers=opt.num_workers,
-        collate_fn=collator,
-    )
+    if len(opt.eval_data) != 0:
+        #dev_sampler = SequentialSampler(dev_dataset)
+        dev_dataloader = DataLoader(
+            dev_dataset,
+            #sampler=dev_sampler,
+            shuffle=False,
+            batch_size=opt.per_gpu_batch_size,
+            drop_last=False,
+            #num_workers=opt.num_workers,
+            collate_fn=collator,
+        )
 
     # 여기는 확인이 필요해보임
     # train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step)
@@ -88,11 +90,18 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
     epoch = 1
     kill_step = 500000
+    
     model.eval()
     encoder = model.get_encoder()
     evaluate_model(
-        opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step
+        opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step, alias="q_p"
     )
+    if opt.contrastive_mode == "moco3":
+        encoder = model.get_encoder(return_encoder_q_wp=True)
+        evaluate_model(
+            opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step, alias="q_wp"
+        )
+    
     model.train()
     prev_ids, prev_mask = None, None
     while step < opt.total_steps and step < kill_step:
@@ -100,8 +109,12 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         for i, batch in enumerate(train_dataloader):
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             step += 1
+            # train_loss, iter_stats = model(**batch, stats_prefix="train")
+            # train_loss.backward()
+            # tokenizer.batch_decode(batch["q_tokens"], skip_special_tokens=True)
+            #import IPython; IPython.embed(); exit(1)
             train_loss, iter_stats = model(**batch, stats_prefix="train")
-            train_loss.backward()
+            train_loss.backward(retain_graph=True)
 
             if opt.optim == "sam" or opt.optim == "asam":
                 optimizer.first_step(zero_grad=True)
@@ -134,8 +147,13 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 gc.collect()
                 encoder = model.get_encoder()
                 evaluate_model(
-                    opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step
+                    opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step, alias="q_p"
                 )
+                if opt.contrastive_mode == "moco3":
+                    encoder = model.get_encoder(return_encoder_q_wp=True)
+                    evaluate_model(
+                        opt, query_encoder=encoder, doc_encoder=encoder, tokenizer=tokenizer, tb_logger=tb_logger, step=step, alias="q_wp"
+                    )
                 # dev set validation
                 # validate(model, dev_dataloader, tb_logger, step)
 
@@ -173,8 +191,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         model.wp_queue_ptr = torch.zeros(1, dtype=torch.long).cuda()
         '''
 
-def evaluate_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
-    datasetnamelist=["scifact", "2018", "2021"]
+def evaluate_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step, alias):
+    datasetnamelist=["scifact", "concatenated_2018", "concatenated_2019", "concatenated_2020", "concatenated_2021"]
 
     for datasetname in datasetnamelist:
         if datasetname == "scifact":
@@ -191,6 +209,13 @@ def evaluate_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
                 lower_case=opt.lower_case,
                 normalize_text=opt.eval_normalize_text,
             )
+            message = []
+            if dist_utils.is_main():
+                for metric in ["NDCG@10", "Recall@10", "Recall@100"]:
+                    message.append(f"{datasetname}/{alias}/{metric}: {metrics[metric]:.2f}")
+                    if tb_logger is not None:
+                        tb_logger.add_scalar(f"{datasetname}/{alias}/{metric}", metrics[metric], step)
+                logger.info(" | ".join(message))
         else:
             metrics = beir_utils.evaluate_model(
                 query_encoder,
@@ -200,19 +225,18 @@ def evaluate_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
                 batch_size=opt.per_gpu_batch_size,
                 norm_doc=opt.norm_doc,
                 norm_query=opt.norm_query,
-                beir_dir="/home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/original/situated_qa_beir/",
+                beir_dir="/home/work/khyunjin1993/dev/myrepo/temporal_alignment_rag/dataset/wikidpr_dataset/contriever_finetuning_data/original/situated_qa_beir_1003/",
                 score_function=opt.score_function,
                 lower_case=opt.lower_case,
                 normalize_text=opt.eval_normalize_text,
             )
-
-        message = []
-        if dist_utils.is_main():
-            for metric in ["NDCG@10", "Recall@10", "Recall@100"]:
-                message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
-                if tb_logger is not None:
-                    tb_logger.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
-            logger.info(" | ".join(message))
+            message = []
+            if dist_utils.is_main():
+                for metric in ["NDCG@10", "Recall@10", "Recall@100", "2018", "2019", "2020", "2021"]:
+                    message.append(f"{datasetname}/{alias}/{metric}: {metrics[metric]:.2f}")
+                    if tb_logger is not None:
+                        tb_logger.add_scalar(f"{datasetname}/{alias}/{metric}", metrics[metric], step)
+                logger.info(" | ".join(message))
     
     
 
@@ -353,8 +377,20 @@ def main():
     # retriever, tokenizer, retriever_model_id = contriever.load_retriever(opt.model_path, opt.pooling, opt.random_init)
     # opt.retriever_model_id = retriever_model_id
 
-    if opt.contrastive_mode == "moco":
+    if opt.contrastive_mode == "moco1":
         model_class = moco.TimeMoCo
+    elif opt.contrastive_mode == "moco2":
+        model_class = moco.TimeMoCo2
+    elif opt.contrastive_mode == "moco3":
+        model_class = moco.TimeMoCo3
+    elif opt.contrastive_mode == "mocoq":
+        model_class = moco.TimeMoCoQ
+    elif opt.contrastive_mode == "mocoq1":
+        model_class = moco.TimeMoCoQ1
+    elif opt.contrastive_mode == "mocoq2":
+        model_class = moco.TimeMoCoQ2
+    elif opt.contrastive_mode == "mocoq2_frezze_embed":
+        model_class = moco.TimeMoCoQ2_Frezze_embed
     elif opt.contrastive_mode == "inbatch":
         model_class = inbatch.InBatch
     else:

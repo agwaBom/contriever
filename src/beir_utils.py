@@ -14,6 +14,7 @@ from beir.retrieval.search.dense import DenseRetrievalExactSearch
 
 from beir.reranking.models import CrossEncoder
 from beir.reranking import Rerank
+import glob
 
 import src.dist_utils as dist_utils
 from src import normalize_text
@@ -72,7 +73,13 @@ class DenseEncoderModel:
                     return_tensors="pt",
                 )
                 qencode = {key: value.cuda() for key, value in qencode.items()}
+                # if contriever
                 emb = self.query_encoder(**qencode, normalize=self.norm_query)
+                # emb = self.query_encoder(**qencode).pooler_output
+                # emb = self.query_encoder(**qencode).projected_score
+                # if self.norm_query:
+                #     emb = torch.nn.functional.normalize(emb, dim=-1)
+
                 allemb.append(emb.cpu())
 
         allemb = torch.cat(allemb, dim=0)
@@ -111,7 +118,12 @@ class DenseEncoderModel:
                     return_tensors="pt",
                 )
                 cencode = {key: value.cuda() for key, value in cencode.items()}
+                # if contriever
                 emb = self.doc_encoder(**cencode, normalize=self.norm_doc)
+                # emb = self.doc_encoder(**cencode).pooler_output
+                # emb = self.doc_encoder(**cencode).projected_score
+                # if self.norm_doc:
+                #     emb = torch.nn.functional.normalize(emb, dim=-1)
                 allemb.append(emb.cpu())
 
         allemb = torch.cat(allemb, dim=0)
@@ -176,9 +188,9 @@ def evaluate_model(
 
     if not dataset == "cqadupstack":
         corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=split)
-        results = retriever.retrieve(corpus, queries)
+        results, timestamp_stats, yearly_stats = retriever.retrieve(corpus, queries)
         if is_main:
-            ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values, ignore_identical_ids=False)
+            ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values, timestamp_stats, yearly_stats, ignore_identical_ids=False)
             for metric in (ndcg, _map, recall, precision, "mrr", "recall_cap", "hole"):
                 if isinstance(metric, str):
                     metric = retriever.evaluate_custom(qrels, results, retriever.k_values, metric=metric)
@@ -189,8 +201,9 @@ def evaluate_model(
     elif dataset == "cqadupstack":  # compute macroaverage over datasets
         paths = glob.glob(data_path)
         for path in paths:
-            corpus, queries, qrels = GenericDataLoader(data_folder=data_folder).load(split=split)
-            results = retriever.retrieve(corpus, queries)
+            # maybe
+            corpus, queries, qrels = GenericDataLoader(data_folder=path).load(split=split)
+            results, timestamp_stats, yearly_stats = retriever.retrieve(corpus, queries)
             if is_main:
                 ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
                 for metric in (ndcg, _map, recall, precision, "mrr", "recall_cap", "hole"):
@@ -204,5 +217,8 @@ def evaluate_model(
             ), f"cqadupstack includes 12 datasets, only {len(value)} values were compute for the {key} metric"
 
     metrics = {key: 100 * np.mean(value) for key, value in metrics.items()}
+
+    for key, value in yearly_stats.items():
+        metrics[key] = value
 
     return metrics

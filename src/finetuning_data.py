@@ -207,9 +207,15 @@ class PositiveDataset(torch.utils.data.Dataset):
         example = self.data[index]
 
         if self.training:
-            question = self._random_space_crop(example["question"])
-            positive = self._random_space_crop(random.choice(example["positive_ctxs"]))
-            weak_positive = self._random_space_crop(random.choice(example["weak_positive_ctxs"]))
+            # question = self._random_space_crop(example["question"])
+            # positive = self._random_space_crop(random.choice(example["positive_ctxs"]))
+            # weak_positive = self._random_space_crop(random.choice(example["weak_positive_ctxs"]))
+            # weak_positive = self._random_space_crop(example["weak_positive_ctxs"][0])
+
+            # no crop
+            question = example["question"]
+            positive = random.choice(example["positive_ctxs"])
+            weak_positive = random.choice(example["weak_positive_ctxs"])
         else:
             question = example["question"]
             positive = example["positive_ctxs"][0]
